@@ -2,9 +2,9 @@
  * @file main.c
  * @brief Main entry point for the C Synthesizer application.
  *
- * Initializes shared data, mutexes, audio system (PortAudio), and the
- * graphical user interface (GTK+). Runs the GTK main loop and handles
- * cleanup on exit.
+ * Initializes shared data for two synthesizer waves, mutexes, the audio system
+ * (PortAudio), and the graphical user interface (GTK+). Runs the GTK main
+ * loop and handles cleanup on exit.
  */
 
  #include <gtk/gtk.h>
@@ -25,8 +25,9 @@
   * @brief Global instance of the shared synthesizer data structure.
   *
   * This structure holds all parameters (frequency, amplitude, ADSR settings, etc.)
-  * and state (waveform phase, envelope stage) shared between the GUI and audio threads.
-  * Access to this structure is protected by the mutex contained within it.
+  * and state (waveform phase, envelope stage) for **two independent waves**,
+  * shared between the GUI and audio threads. Access to this structure is
+  * protected by the mutex contained within it.
   * It is declared as `extern` in gui.c and audio.c.
   */
  SharedSynthData g_synth_data;
@@ -52,9 +53,9 @@
   * @brief Main function and entry point of the synthesizer application.
   *
   * Orchestrates the application lifecycle:
-  * 1. Initializes the global shared data (`g_synth_data`) with default values.
+  * 1. Initializes the global shared data (`g_synth_data`) with default values for **both waves**.
   * 2. Initializes the mutex within `g_synth_data`.
-  * 3. Initializes the PortAudio library.
+  * 3. Initializes the PortAudio library and audio state.
   * 4. Creates and configures the GtkApplication instance.
   * 5. Connects the GTK 'activate' signal to the local `activate` function.
   * 6. Runs the GTK main event loop (`g_application_run`), which blocks until the application quits.
@@ -70,26 +71,44 @@
      int mutex_ret;
      PaError pa_err;
  
-     // --- 1. Initialize Global Data Defaults ---
+     // --- 1. Initialize Global Data Defaults for Both Waves ---
      // Use designated initializers (C99+) for clarity
      g_synth_data = (SharedSynthData) {
-         .frequency = 440.0,        // Default frequency A4
-         .amplitude = 0.5,          // Default amplitude
-         .waveform = WAVE_SINE,     // Default waveform
-         .attackTime = 0.01,        // Default ADSR values
+         // Wave 1 Defaults
+         .frequency = 440.0,        // A4 pitch
+         .amplitude = 0.5,
+         .waveform = WAVE_SINE,
+         .attackTime = 0.01,
          .decayTime = 0.1,
          .sustainLevel = 0.7,
          .releaseTime = 0.3,
-         .phase = 0.0,              // Initial phase
-         .note_active = 0,          // Note initially off
-         .sampleRate = 44100.0,     // Standard CD quality sample rate
-         .waveform_drawing_area = NULL, // GUI sets this later
-         .currentStage = ENV_IDLE,  // Initial envelope state
+         .phase = 0.0,
+         .note_active = 0,
+         .currentStage = ENV_IDLE,
          .timeInStage = 0.0,
-         .lastEnvValue = 0.0
+         .lastEnvValue = 0.0,
+ 
+         // Wave 2 Defaults (Slightly different settings)
+         .frequency2 = 440.0 * 3.0 / 2.0, // Perfect 5th above A4 (E5) approx 660 Hz
+         .amplitude2 = 0.3,          // Lower amplitude than wave 1
+         .waveform2 = WAVE_SQUARE,   // Different waveform
+         .attackTime2 = 0.05,        // Slower attack than wave 1
+         .decayTime2 = 0.2,
+         .sustainLevel2 = 0.5,
+         .releaseTime2 = 0.5,        // Longer release than wave 1
+         .phase2 = 0.0,
+         .note_active2 = 0,
+         .currentStage2 = ENV_IDLE,
+         .timeInStage2 = 0.0,
+         .lastEnvValue2 = 0.0,
+ 
+         // Common Defaults
+         .sampleRate = 44100.0,     // Standard CD quality sample rate
+         .waveform_drawing_area = NULL // GUI sets this later
+ 
          // Mutex field requires explicit initialization below
      };
-     printf("Initialized synth data defaults.\n");
+     printf("Initialized synth data defaults for both waves.\n");
  
  
      // --- 2. Initialize Mutex ---
@@ -105,7 +124,8 @@
      }
      printf("Initialized mutex.\n");
  
-     // --- 3. Initialize PortAudio ---
+     // --- 3. Initialize PortAudio & Audio State ---
+     // initialize_audio now also sets initial envelope states for both waves
      pa_err = initialize_audio(&g_synth_data); // Call function from audio module
      if (pa_err != paNoError) {
          fprintf(stderr, "Failed to initialize PortAudio (Error %d: %s). Exiting.\n", pa_err, Pa_GetErrorText(pa_err));
@@ -115,7 +135,8 @@
  
      // --- 4. Create and Configure GTK Application ---
      // Use default flags, includes handling command line args like --version
-     app = gtk_application_new("org.example.csynth.modular", G_APPLICATION_DEFAULT_FLAGS);
+     // Using a more specific application ID is good practice
+     app = gtk_application_new("com.example.csynth.dualwave", G_APPLICATION_DEFAULT_FLAGS);
       if (app == NULL) {
           fprintf(stderr, "Error: Failed to create GTK application\n");
           // Cleanup previously initialized resources
@@ -150,7 +171,7 @@
      printf("Destroying mutex...\n");
      mutex_ret = pthread_mutex_destroy(&g_synth_data.mutex);
      if (mutex_ret != 0) {
-         // Log error, but proceed with exit as not much else can be done :/ 
+         // Log error, but proceed with exit as not much else can be done :/
          fprintf(stderr, "Warning: Mutex destruction failed: %s\n", strerror(mutex_ret));
      }
  
@@ -175,7 +196,7 @@
      printf("GTK Application activating...\n");
  
      // --- 1. Create the GUI ---
-     // This function (defined in gui.c) builds the window, widgets,
+     // This function (defined in gui.c) builds the window, widgets for both waves,
      // connects widget signals, and shows the window.
      create_gui(app); // Call function from gui module
      printf("GUI created.\n");
@@ -200,7 +221,6 @@
          gtk_widget_destroy(dialog);         // Destroy dialog after user closes it
  
          // Exit the application forcefully as audio is essential.
-         // Consider if a more graceful shutdown is possible/needed???
          exit(EXIT_FAILURE);
      }
      printf("Audio stream started.\n");

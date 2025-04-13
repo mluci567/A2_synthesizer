@@ -15,10 +15,14 @@ OBJS = $(SRCS:.c=.o)
 # -pthread is needed for compiling AND linking with pthreads
 CFLAGS = -Wall -g -pthread
 # Include Paths (using pkg-config)
-CFLAGS += $(shell pkg-config --cflags gtk+-3.0 portaudio-2.0)
+GTK_CFLAGS = $(shell pkg-config --cflags gtk+-3.0)
+PORTAUDIO_CFLAGS = $(shell pkg-config --cflags portaudio-2.0)
+CFLAGS += $(GTK_CFLAGS) $(PORTAUDIO_CFLAGS)
 # Linker Flags (using pkg-config)
 # -pthread is needed here for linking
-LIBS = $(shell pkg-config --libs gtk+-3.0 portaudio-2.0) -lm -lpthread
+GTK_LIBS = $(shell pkg-config --libs gtk+-3.0)
+PORTAUDIO_LIBS = $(shell pkg-config --libs portaudio-2.0)
+LIBS = $(GTK_LIBS) $(PORTAUDIO_LIBS) -lm -lpthread
 
 # --- Testing Specific Definitions ---
 TEST_DIR = tests
@@ -41,13 +45,13 @@ TEST_AUDIO_LIFECYCLE_OBJ = $(TEST_AUDIO_LIFECYCLE_SRC:.c=.o)
 TEST_AUDIO_LIFECYCLE_RUNNER = test_runner_audio_lifecycle
 
 # Common flags for compiling test code and project code *for* tests
-# -DTESTING to enable test-specific code (like non-static functions)
-# -I. so tests can find headers like "synthesizer/synth_data.h"
-TEST_CFLAGS = $(CFLAGS) -DTESTING -I.
+CUNIT_CFLAGS = $(shell pkg-config --cflags cunit)
+CMOCKA_CFLAGS = $(shell pkg-config --cflags cmocka)
+TEST_CFLAGS = $(CFLAGS) -DTESTING -I. $(CUNIT_CFLAGS) $(CMOCKA_CFLAGS)
 
 # Libraries needed for testing
-CUNIT_LIBS = -lcunit
-CMOCKA_LIBS = -lcmocka
+CUNIT_LIBS = $(shell pkg-config --libs cunit)
+CMOCKA_LIBS = $(shell pkg-config --libs cmocka) # Use pkg-config if available
 TEST_COMMON_LIBS = -lpthread -lm # Common libs needed by tested code or mocks
 
 # --- Build Targets ---
@@ -72,33 +76,33 @@ $(SYNTH_DIR)/audio.o: $(SYNTH_DIR)/audio.c $(SYNTH_DIR)/audio.h $(SYNTH_DIR)/syn
 
 
 # --- Rules for Compiling Project Files *for Testing* ---
-# These use TEST_CFLAGS (which includes -DTESTING)
+# These use TEST_CFLAGS
 
-# Rule to compile audio.c for testing (Test Suites 1)
+# Rule to compile audio.c for testing
 $(AUDIO_OBJ_FOR_TEST): $(SYNTH_DIR)/audio.c $(SYNTH_DIR)/audio.h $(SYNTH_DIR)/synth_data.h
 	@echo "Compiling audio.c for testing..."
 	$(CC) $(TEST_CFLAGS) -c $(SYNTH_DIR)/audio.c -o $@
 
-# Rule to compile gui.c for testing (Test Suite 2)
+# Rule to compile gui.c for testing
 $(GUI_OBJ_FOR_TEST): $(SYNTH_DIR)/gui.c $(SYNTH_DIR)/gui.h $(SYNTH_DIR)/synth_data.h
 	@echo "Compiling gui.c for testing..."
 	$(CC) $(TEST_CFLAGS) -c $(SYNTH_DIR)/gui.c -o $@
 
 
 # --- Rules for Compiling Test Harnesses ---
-# These use TEST_CFLAGS (includes -DTESTING and -I.)
+# These use TEST_CFLAGS
 
-# Rule to compile Test Suite 1 harness
+# Rule to compile Test Suite 1 harness (Uses CUnit)
 $(TEST_AUDIO_CALLBACK_OBJ): $(TEST_AUDIO_CALLBACK_SRC) $(SYNTH_DIR)/synth_data.h $(SYNTH_DIR)/audio.h
 	@echo "Compiling test harness: $(TEST_AUDIO_CALLBACK_SRC)"
 	$(CC) $(TEST_CFLAGS) -c $< -o $@
 
-# Rule to compile Test Suite 2 harness
+# Rule to compile Test Suite 2 harness (Uses CUnit)
 $(TEST_GUI_HELPERS_OBJ): $(TEST_GUI_HELPERS_SRC) $(SYNTH_DIR)/synth_data.h $(SYNTH_DIR)/gui.h
 	@echo "Compiling test harness: $(TEST_GUI_HELPERS_SRC)"
 	$(CC) $(TEST_CFLAGS) -c $< -o $@
 
-# Rule to compile Test Suite 3 harness (includes audio.c itself)
+# Rule to compile Test Suite 3 harness (Uses CMocka)
 $(TEST_AUDIO_LIFECYCLE_OBJ): $(TEST_AUDIO_LIFECYCLE_SRC) $(SYNTH_DIR)/synth_data.h $(SYNTH_DIR)/audio.h
 	@echo "Compiling test harness: $(TEST_AUDIO_LIFECYCLE_SRC)"
 	$(CC) $(TEST_CFLAGS) -c $< -o $@
@@ -109,18 +113,17 @@ $(TEST_AUDIO_LIFECYCLE_OBJ): $(TEST_AUDIO_LIFECYCLE_SRC) $(SYNTH_DIR)/synth_data
 # Rule to link Test Suite 1 runner (Audio Callback - CUnit)
 $(TEST_AUDIO_CALLBACK_RUNNER): $(TEST_AUDIO_CALLBACK_OBJ) $(AUDIO_OBJ_FOR_TEST)
 	@echo "Linking test runner: $@"
-	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CUNIT_LIBS) $(TEST_COMMON_LIBS)
+	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CUNIT_LIBS) $(PORTAUDIO_LIBS) $(TEST_COMMON_LIBS)
 
 # Rule to link Test Suite 2 runner (GUI Helpers - CUnit)
 $(TEST_GUI_HELPERS_RUNNER): $(TEST_GUI_HELPERS_OBJ) $(GUI_OBJ_FOR_TEST)
 	@echo "Linking test runner: $@"
-	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CUNIT_LIBS) $(TEST_COMMON_LIBS)
+	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CUNIT_LIBS) $(GTK_LIBS) $(TEST_COMMON_LIBS)
 
 # Rule to link Test Suite 3 runner (Audio Lifecycle - CMocka)
-# Links only the test object file because it includes audio.c
-$(TEST_AUDIO_LIFECYCLE_RUNNER): $(TEST_AUDIO_LIFECYCLE_OBJ)
+$(TEST_AUDIO_LIFECYCLE_RUNNER): $(TEST_AUDIO_LIFECYCLE_OBJ) $(AUDIO_OBJ_FOR_TEST)
 	@echo "Linking test runner: $@"
-	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CMOCKA_LIBS) $(TEST_COMMON_LIBS)
+	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CMOCKA_LIBS) $(PORTAUDIO_LIBS) $(TEST_COMMON_LIBS)
 
 
 # --- Main Test Target ---

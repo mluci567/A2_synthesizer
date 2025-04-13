@@ -3,8 +3,9 @@
  * @brief Handles audio initialization, processing, and termination using PortAudio.
  *
  * This file contains the core audio callback function responsible for generating
- * synthesizer waveforms based on shared parameters, including ADSR envelope
- * calculation. It also manages the PortAudio stream lifecycle.
+ * synthesizer waveforms for two independent waves based on shared parameters,
+ * including ADSR envelope calculation for each wave. The outputs of the two
+ * waves are mixed together. It also manages the PortAudio stream lifecycle.
  */
 
  #include <portaudio.h>
@@ -12,12 +13,12 @@
  #include <pthread.h>
  #include <math.h>
  #include <stdio.h>
- #include <string.h> // For strerror
- #include <errno.h>  // For errno
- #include <sched.h> // For scheduling constants/functions
+ #include <string.h> 
+ #include <errno.h> 
+ #include <sched.h> 
  
- #include "audio.h"      // Include the header for this module
- #include "synth_data.h" // Include the shared data structure definition
+ #include "audio.h"      
+ #include "synth_data.h" 
  
  // --- External Global Shared Data Instance ---
  /**
@@ -70,20 +71,21 @@
  // --- PortAudio Callback Function ---
  
  /**
-  * @brief PortAudio callback function for generating audio samples.
+  * @brief PortAudio callback function for generating and mixing audio samples for two waves.
   *
   * This function is called by the PortAudio library in a high-priority thread
   * whenever the audio device needs more samples. It reads shared synthesizer
-  * parameters, calculates the ADSR envelope, generates the appropriate waveform,
-  * applies the envelope, and writes the samples to the output buffer.
-  * It minimizes mutex lock time by copying parameters locally.
+  * parameters for **both waves**, calculates their respective ADSR envelopes,
+  * generates the appropriate waveforms, applies the envelopes, updates phase and state
+  * for both waves, **mixes the resulting samples**, and writes the final mixed
+  * sample to the output buffer. It minimizes mutex lock time by copying parameters locally.
   *
   * @param inputBuffer Unused (input audio buffer).
-  * @param outputBuffer Buffer where generated audio samples (float) should be written.
+  * @param outputBuffer Buffer where generated mixed audio samples (float) should be written.
   * @param framesPerBuffer The number of sample frames to generate for the buffer.
   * @param timeInfo Timing information from PortAudio (unused).
   * @param statusFlags Flags indicating buffer under/overflow or other conditions.
-  * @param userData A pointer to the SharedSynthData structure containing synth parameters and state.
+  * @param userData A pointer to the SharedSynthData structure containing synth parameters and state for both waves.
   *
   * @return `paContinue` (0) if processing should continue, or `paAbort` (<0) on critical errors (like mutex failure).
   *
@@ -105,7 +107,9 @@
      unsigned long i;
      int ret_lock, ret_unlock;
  
-     // Local copies for thread safety and reduced lock contention
+     // --- Local copies for thread safety and reduced lock contention ---
+ 
+     // Wave 1 Local Copies
      double local_freq, local_amp, local_sustain_level, local_attack_time, local_decay_time, local_release_time;
      WaveformType local_wave;
      EnvelopeStage local_stage;
@@ -113,10 +117,22 @@
      double local_phase;
      double local_timeInStage;
      double local_lastEnvValue; // Value captured by GUI thread at note-off
+ 
+     // Wave 2 Local Copies
+     double local_freq2, local_amp2, local_sustain_level2, local_attack_time2, local_decay_time2, local_release_time2;
+     WaveformType local_wave2;
+     EnvelopeStage local_stage2;
+     int local_note_active2;
+     double local_phase2;
+     double local_timeInStage2;
+     double local_lastEnvValue2;
+ 
+     // Common Local Copies
      double local_sampleRate;
  
      // ADSR state variables local to the callback run
      double env_multiplier = 0.0;
+     double env_multiplier2 = 0.0; // Envelope for Wave 2
      double time_increment;
  
      // Check for PortAudio buffer issues
@@ -134,6 +150,7 @@
      }
  
      // Copy necessary data from shared structure to local variables
+     // Wave 1
      local_freq = shared_data->frequency;
      local_amp = shared_data->amplitude;
      local_wave = shared_data->waveform;
@@ -145,7 +162,23 @@
      local_release_time = shared_data->releaseTime;
      local_phase = shared_data->phase;
      local_timeInStage = shared_data->timeInStage;
-     local_lastEnvValue = shared_data->lastEnvValue; // Get value captured by GUI
+     local_lastEnvValue = shared_data->lastEnvValue;
+ 
+     // Wave 2
+     local_freq2 = shared_data->frequency2;
+     local_amp2 = shared_data->amplitude2;
+     local_wave2 = shared_data->waveform2;
+     local_note_active2 = shared_data->note_active2;
+     local_stage2 = shared_data->currentStage2;
+     local_attack_time2 = shared_data->attackTime2;
+     local_decay_time2 = shared_data->decayTime2;
+     local_sustain_level2 = shared_data->sustainLevel2;
+     local_release_time2 = shared_data->releaseTime2;
+     local_phase2 = shared_data->phase2;
+     local_timeInStage2 = shared_data->timeInStage2;
+     local_lastEnvValue2 = shared_data->lastEnvValue2;
+ 
+     // Common
      local_sampleRate = shared_data->sampleRate;
  
      // Unlock mutex as quickly as possible
@@ -165,107 +198,127 @@
      for( i = 0; i < framesPerBuffer; i++ )
      {
          float sample = 0.0f;
+         float sample2 = 0.0f; // Sample for Wave 2
+         float mixed_sample = 0.0f;
  
-         // --- 1. Update Envelope Stage & Calculate Multiplier (using local copies) ---
+         // ==================== WAVE 1 Processing ====================
          local_timeInStage += time_increment;
  
-         // State machine for ADSR envelope
+         // State machine for Wave 1 ADSR envelope
          switch(local_stage)
          {
              case ENV_IDLE:
                  env_multiplier = 0.0;
                  break;
              case ENV_ATTACK:
-                 // Calculate attack ramp
-                 if (local_attack_time <= 0.0) { // Instant attack
-                     env_multiplier = local_amp;
-                     local_stage = ENV_DECAY; local_timeInStage = 0.0;
-                 } else {
-                     env_multiplier = local_amp * fmin(1.0, (local_timeInStage / local_attack_time));
-                 }
-                 // Check for transition to Decay
-                 if (local_timeInStage >= local_attack_time) {
-                     env_multiplier = local_amp; // Ensure peak
-                     local_stage = ENV_DECAY; local_timeInStage = 0.0;
-                 }
+                 if (local_attack_time <= 0.0) { env_multiplier = local_amp; local_stage = ENV_DECAY; local_timeInStage = 0.0; }
+                 else { env_multiplier = local_amp * fmin(1.0, (local_timeInStage / local_attack_time)); }
+                 if (local_timeInStage >= local_attack_time) { env_multiplier = local_amp; local_stage = ENV_DECAY; local_timeInStage = 0.0; }
                  break;
              case ENV_DECAY:
-                 // Calculate decay ramp towards sustain level
-                  if (local_decay_time <= 0.0 || local_sustain_level >= 1.0) { // Instant decay or max sustain
-                     env_multiplier = local_amp * local_sustain_level;
-                     local_stage = ENV_SUSTAIN; local_timeInStage = 0.0;
-                  } else {
-                     double decay_factor = fmin(1.0, local_timeInStage / local_decay_time);
-                     env_multiplier = local_amp * (1.0 - (1.0 - local_sustain_level) * decay_factor);
-                  }
-                 // Check for transition to Sustain
-                 if (local_timeInStage >= local_decay_time) {
-                     env_multiplier = local_amp * local_sustain_level; // Ensure sustain level reached
-                     local_stage = ENV_SUSTAIN; local_timeInStage = 0.0;
-                 }
-                 // Clamp lower bound during decay
-                 if (env_multiplier < local_amp * local_sustain_level) {
-                      env_multiplier = local_amp * local_sustain_level;
-                 }
+                  if (local_decay_time <= 0.0 || local_sustain_level >= 1.0) { env_multiplier = local_amp * local_sustain_level; local_stage = ENV_SUSTAIN; local_timeInStage = 0.0; }
+                  else { double decay_factor = fmin(1.0, local_timeInStage / local_decay_time); env_multiplier = local_amp * (1.0 - (1.0 - local_sustain_level) * decay_factor); }
+                 if (local_timeInStage >= local_decay_time) { env_multiplier = local_amp * local_sustain_level; local_stage = ENV_SUSTAIN; local_timeInStage = 0.0; }
+                 if (env_multiplier < local_amp * local_sustain_level) { env_multiplier = local_amp * local_sustain_level; }
                  break;
              case ENV_SUSTAIN:
-                 // Hold at sustain level
                  env_multiplier = local_amp * local_sustain_level;
-                 // Stage remains SUSTAIN until GUI triggers RELEASE
                  break;
              case ENV_RELEASE:
-                  // Calculate release ramp down from captured level
-                  if (local_release_time <= 0.0 || local_lastEnvValue <= 1e-9) { // Instant release or starting near zero
-                     env_multiplier = 0.0;
-                  } else {
-                     env_multiplier = local_lastEnvValue * fmax(0.0, (1.0 - (local_timeInStage / local_release_time)));
-                  }
-                  // Check for transition to Idle
-                 if (local_timeInStage >= local_release_time || env_multiplier <= 1e-9) {
-                     env_multiplier = 0.0;
-                     local_stage = ENV_IDLE;
-                     local_note_active = 0; // Mark note fully off now
-                 }
+                  if (local_release_time <= 0.0 || local_lastEnvValue <= 1e-9) { env_multiplier = 0.0; }
+                  else { env_multiplier = local_lastEnvValue * fmax(0.0, (1.0 - (local_timeInStage / local_release_time))); }
+                  if (local_timeInStage >= local_release_time || env_multiplier <= 1e-9) { env_multiplier = 0.0; local_stage = ENV_IDLE; local_note_active = 0; }
                  break;
-              default: // Should not happen
-                 fprintf(stderr, "Warning: Unknown envelope stage %d\n", local_stage);
-                 env_multiplier = 0.0;
-                 local_stage = ENV_IDLE;
-                 local_note_active = 0;
+              default:
+                 fprintf(stderr, "Warning: Unknown envelope stage %d for Wave 1\n", local_stage);
+                 env_multiplier = 0.0; local_stage = ENV_IDLE; local_note_active = 0;
                  break;
          }
-         // Clamp envelope multiplier (safety check)
-         env_multiplier = fmax(0.0, fmin(local_amp, env_multiplier));
+         env_multiplier = fmax(0.0, fmin(local_amp, env_multiplier)); // Clamp envelope
  
-         // --- 2. Generate Waveform Sample ---
-         // Only generate if envelope is audible
+         // Generate Wave 1 Sample
          if (env_multiplier > 1e-9) {
-             // Select waveform based on local copy
              switch(local_wave) {
                   case WAVE_SINE:     sample = (float)(sin(local_phase)); break;
                   case WAVE_SQUARE:   sample = (float)((sin(local_phase) >= 0.0 ? 1.0 : -1.0)); break;
-                  case WAVE_SAWTOOTH: sample = (float)((fmod(local_phase, 2.0 * M_PI) / M_PI) - 1.0); break; // Ramps -1 to +1
-                  case WAVE_TRIANGLE: sample = (float)((2.0 / M_PI) * asin(sin(local_phase))); break; // Approximation -1 to +1
+                  case WAVE_SAWTOOTH: sample = (float)((fmod(local_phase, 2.0 * M_PI) / M_PI) - 1.0); break;
+                  case WAVE_TRIANGLE: sample = (float)((2.0 / M_PI) * asin(sin(local_phase))); break;
                   default:            sample = 0.0f; break;
              }
-             // Apply envelope
-             sample *= env_multiplier;
- 
-             // --- 3. Update Phase ---
-             // Increment phase based on frequency and sample rate
+             sample *= env_multiplier; // Apply envelope
+             // Update Phase 1
              local_phase += 2.0 * M_PI * local_freq / local_sampleRate;
-             // Wrap phase to [0, 2*PI)
-             local_phase = fmod(local_phase, 2.0 * M_PI);
-             if (local_phase < 0.0) local_phase += 2.0 * M_PI;
+             local_phase = fmod(local_phase, 2.0 * M_PI); if (local_phase < 0.0) local_phase += 2.0 * M_PI;
          } else {
-             // Output silence if envelope is effectively zero
              sample = 0.0f;
-              if (local_stage == ENV_IDLE && local_phase != 0.0) {
-                  // local_phase = 0.0; // Optional: Reset phase when idle?
-              }
+             // Optional: Reset phase when idle?
+             // if (local_stage == ENV_IDLE && local_phase != 0.0) { local_phase = 0.0; }
          }
-         // Write the final sample to the output buffer
-         *out++ = sample;
+ 
+         // ==================== WAVE 2 Processing ====================
+         local_timeInStage2 += time_increment;
+ 
+         // State machine for Wave 2 ADSR envelope
+         switch(local_stage2)
+         {
+             case ENV_IDLE:
+                 env_multiplier2 = 0.0;
+                 break;
+             case ENV_ATTACK:
+                 if (local_attack_time2 <= 0.0) { env_multiplier2 = local_amp2; local_stage2 = ENV_DECAY; local_timeInStage2 = 0.0; }
+                 else { env_multiplier2 = local_amp2 * fmin(1.0, (local_timeInStage2 / local_attack_time2)); }
+                 if (local_timeInStage2 >= local_attack_time2) { env_multiplier2 = local_amp2; local_stage2 = ENV_DECAY; local_timeInStage2 = 0.0; }
+                 break;
+             case ENV_DECAY:
+                  if (local_decay_time2 <= 0.0 || local_sustain_level2 >= 1.0) { env_multiplier2 = local_amp2 * local_sustain_level2; local_stage2 = ENV_SUSTAIN; local_timeInStage2 = 0.0; }
+                  else { double decay_factor2 = fmin(1.0, local_timeInStage2 / local_decay_time2); env_multiplier2 = local_amp2 * (1.0 - (1.0 - local_sustain_level2) * decay_factor2); }
+                 if (local_timeInStage2 >= local_decay_time2) { env_multiplier2 = local_amp2 * local_sustain_level2; local_stage2 = ENV_SUSTAIN; local_timeInStage2 = 0.0; }
+                 if (env_multiplier2 < local_amp2 * local_sustain_level2) { env_multiplier2 = local_amp2 * local_sustain_level2; }
+                 break;
+             case ENV_SUSTAIN:
+                 env_multiplier2 = local_amp2 * local_sustain_level2;
+                 break;
+             case ENV_RELEASE:
+                  if (local_release_time2 <= 0.0 || local_lastEnvValue2 <= 1e-9) { env_multiplier2 = 0.0; }
+                  else { env_multiplier2 = local_lastEnvValue2 * fmax(0.0, (1.0 - (local_timeInStage2 / local_release_time2))); }
+                  if (local_timeInStage2 >= local_release_time2 || env_multiplier2 <= 1e-9) { env_multiplier2 = 0.0; local_stage2 = ENV_IDLE; local_note_active2 = 0; }
+                 break;
+              default:
+                 fprintf(stderr, "Warning: Unknown envelope stage %d for Wave 2\n", local_stage2);
+                 env_multiplier2 = 0.0; local_stage2 = ENV_IDLE; local_note_active2 = 0;
+                 break;
+         }
+         env_multiplier2 = fmax(0.0, fmin(local_amp2, env_multiplier2)); // Clamp envelope 2
+ 
+         // Generate Wave 2 Sample
+         if (env_multiplier2 > 1e-9) {
+             switch(local_wave2) {
+                  case WAVE_SINE:     sample2 = (float)(sin(local_phase2)); break;
+                  case WAVE_SQUARE:   sample2 = (float)((sin(local_phase2) >= 0.0 ? 1.0 : -1.0)); break;
+                  case WAVE_SAWTOOTH: sample2 = (float)((fmod(local_phase2, 2.0 * M_PI) / M_PI) - 1.0); break;
+                  case WAVE_TRIANGLE: sample2 = (float)((2.0 / M_PI) * asin(sin(local_phase2))); break;
+                  default:            sample2 = 0.0f; break;
+             }
+             sample2 *= env_multiplier2; // Apply envelope 2
+             // Update Phase 2
+             local_phase2 += 2.0 * M_PI * local_freq2 / local_sampleRate;
+             local_phase2 = fmod(local_phase2, 2.0 * M_PI); if (local_phase2 < 0.0) local_phase2 += 2.0 * M_PI;
+         } else {
+             sample2 = 0.0f;
+             // Optional: Reset phase when idle?
+             // if (local_stage2 == ENV_IDLE && local_phase2 != 0.0) { local_phase2 = 0.0; }
+         }
+ 
+         // ==================== Mix and Write Output ====================
+         // Mix samples (simple addition, might need clipping or scaling later)
+         mixed_sample = sample + sample2;
+ 
+         // Simple clipping to prevent exceeding -1.0 to 1.0 range
+         if (mixed_sample > 1.0f) mixed_sample = 1.0f;
+         else if (mixed_sample < -1.0f) mixed_sample = -1.0f;
+ 
+         // Write the final mixed sample to the output buffer
+         *out++ = mixed_sample;
      }
      // --- End Audio Generation Loop ---
  
@@ -279,11 +332,17 @@
      }
  
      // Write back state variables that were modified locally
+     // Wave 1
      shared_data->phase = local_phase;
      shared_data->timeInStage = local_timeInStage;
      shared_data->currentStage = local_stage;
      shared_data->note_active = local_note_active;
-     // lastEnvValue is only written by GUI thread now
+ 
+     // Wave 2
+     shared_data->phase2 = local_phase2;
+     shared_data->timeInStage2 = local_timeInStage2;
+     shared_data->currentStage2 = local_stage2;
+     shared_data->note_active2 = local_note_active2;
  
      // Unlock mutex
      ret_unlock = pthread_mutex_unlock(&shared_data->mutex);
@@ -300,15 +359,16 @@
  
  
  /**
-  * @brief Initializes the PortAudio library and synth state.
+  * @brief Initializes the PortAudio library and synth state for both waves.
   *
   * Must be called once at application startup before any other audio functions.
   * Initializes the PortAudio library itself and sets the initial ADSR envelope
-  * state in the shared data structure.
+  * state for **both waves** in the shared data structure.
   *
   * @param[in,out] data Pointer to the shared synthesizer data structure.
-  * The envelope state fields (currentStage, timeInStage, lastEnvValue)
-  * will be initialized. Mutex must be initialized beforehand.
+  * The envelope state fields (currentStage, timeInStage, lastEnvValue, and
+  * currentStage2, timeInStage2, lastEnvValue2) will be initialized.
+  * Mutex must be initialized beforehand.
   * @return `paNoError` (0) on success, or a negative PaError code on failure.
   */
  PaError initialize_audio(SharedSynthData *data) {
@@ -319,13 +379,18 @@
      }
      printf("PortAudio initialized. Version: %s\n", Pa_GetVersionInfo()->versionText);
  
-     // Initialize ADSR state safely within the shared data
+     // Initialize ADSR state safely within the shared data for both waves
      int ret_lock = pthread_mutex_lock(&data->mutex);
      CHECK_PTHREAD_ERR(ret_lock, "initialize_audio lock");
      if (ret_lock == 0) {
+         // Wave 1
          data->currentStage = ENV_IDLE;
          data->timeInStage = 0.0;
-         data->lastEnvValue = 0.0; // Initialize to 0
+         data->lastEnvValue = 0.0;
+         // Wave 2
+         data->currentStage2 = ENV_IDLE;
+         data->timeInStage2 = 0.0;
+         data->lastEnvValue2 = 0.0;
          int ret_unlock = pthread_mutex_unlock(&data->mutex);
          CHECK_PTHREAD_ERR(ret_unlock, "initialize_audio unlock");
      } else {
@@ -342,7 +407,7 @@
   *
   * Configures and opens the default audio output device using parameters
   * (like sample rate) from the shared data structure. Starts the stream,
-  * which begins calling the `paCallback` function.
+  * which begins calling the `paCallback` function to generate mixed audio.
   *
   * @param[in] data Pointer to the shared synthesizer data structure (used for sample rate and passed to callback).
   * @return `paNoError` (0) on success, or a negative PaError code on failure.
@@ -376,7 +441,7 @@
      printf("Using default output device: %s\n", deviceInfo->name);
  
      // Configure output stream parameters
-     outputParameters.channelCount = 1; // Mono output
+     outputParameters.channelCount = 1; // Mono output (mixed waves)
      outputParameters.sampleFormat = paFloat32; // Use 32-bit float samples
      // Use default low latency setting - adjust if needed
      outputParameters.suggestedLatency = deviceInfo->defaultLowOutputLatency;
@@ -491,4 +556,4 @@
  
      printf("PortAudio terminated successfully.\n");
      return paNoError;
- } 
+ }

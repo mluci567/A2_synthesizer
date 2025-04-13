@@ -62,18 +62,18 @@
   * @param inputBuffer Unused input buffer.
   * @param outputBuffer Buffer for generated audio samples.
   * @param framesPerBuffer Number of sample frames to generate.
-  * @param timeInfo PortAudio timing information (unused in implementation).
-  * @param statusFlags PortAudio status flags.
+  * @param timeInfo PortAudio timing information. Use the official type.
+  * @param statusFlags PortAudio status flags. Use the official type.
   * @param userData Pointer to the SharedSynthData structure.
   * @return `paContinue` (0) or `paAbort` (<0).
   * @see paCallback() implementation in audio.c
   */
  int paCallback( const void *inputBuffer, void *outputBuffer,
                  unsigned long framesPerBuffer,
-                 const void* timeInfo, // Using void* as PaStreamCallbackTimeInfo might not be defined everywhere
-                 unsigned long statusFlags, // Using unsigned long as PaStreamCallbackFlags might not be defined
+                 const PaStreamCallbackTimeInfo* timeInfo, // <-- Use official type
+                 PaStreamCallbackFlags statusFlags,       // <-- Use official type
                  void *userData );
- #endif // TESTING
+ #endif
  
  
  #endif // AUDIO_H
