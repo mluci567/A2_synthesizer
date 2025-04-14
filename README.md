@@ -92,7 +92,8 @@ A2_synthesizer/
 └── tests/                # Unit tests
     ├── test_audio_lifecycle.c # CMocka tests for audio init/start/stop/terminate
     ├── test_gui_helpers.c  # CUnit tests for GUI helper functions (e.g., envelope calculation)
-    └── test_audio.c        # CUnit tests for the audio processing callback (paCallback) 
+    ├── test_audio.c        # CUnit tests for the audio processing callback (paCallback) 
+    └── test_concurrency.c  # CUnit tests for basic concurrent data access 
 ```
 ## Testing
 The project includes unit tests using the `CUnit` and `CMocka` frameworks.

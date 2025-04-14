@@ -20,8 +20,8 @@
  #include <CUnit/Basic.h>
 
  // Include project headers (adjust path as needed)
- #include "synth/synth_data.h" // Correct relative path from makefile's perspective
- #include "synth/audio.h"     // Correct relative path from makefile's perspective
+ #include "../synth/synth_data.h" // Correct relative path from makefile's perspective
+ #include "../synth/audio.h"     // Correct relative path from makefile's perspective
 
  // --- Test Globals ---
  /** @brief Mock sample rate used for calculations in tests. */

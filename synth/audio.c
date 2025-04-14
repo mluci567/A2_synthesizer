@@ -17,8 +17,8 @@
  #include <errno.h> 
  #include <sched.h> 
  
- #include "audio.h"      
- #include "synth_data.h" 
+ #include "../synth/audio.h"      
+ #include "../synth/synth_data.h" 
  
  // --- External Global Shared Data Instance ---
  /**

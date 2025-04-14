@@ -44,10 +44,16 @@ TEST_AUDIO_LIFECYCLE_SRC = $(TEST_DIR)/test_audio_lifecycle.c
 TEST_AUDIO_LIFECYCLE_OBJ = $(TEST_AUDIO_LIFECYCLE_SRC:.c=.o)
 TEST_AUDIO_LIFECYCLE_RUNNER = test_runner_audio_lifecycle
 
+# Test Suite 4: Concurrency (CUnit) 
+TEST_CONCURRENCY_SRC = $(TEST_DIR)/test_concurrency.c
+TEST_CONCURRENCY_OBJ = $(TEST_CONCURRENCY_SRC:.c=.o)
+TEST_CONCURRENCY_RUNNER = test_runner_concurrency
+
 # Common flags for compiling test code and project code *for* tests
 CUNIT_CFLAGS = $(shell pkg-config --cflags cunit)
 CMOCKA_CFLAGS = $(shell pkg-config --cflags cmocka)
-TEST_CFLAGS = $(CFLAGS) -DTESTING -I. $(CUNIT_CFLAGS) $(CMOCKA_CFLAGS)
+# Include synth directory for synth_data.h etc.
+TEST_CFLAGS = $(CFLAGS) -DTESTING -I$(SYNTH_DIR) $(CUNIT_CFLAGS) $(CMOCKA_CFLAGS)
 
 # Libraries needed for testing
 CUNIT_LIBS = $(shell pkg-config --libs cunit)
@@ -107,6 +113,11 @@ $(TEST_AUDIO_LIFECYCLE_OBJ): $(TEST_AUDIO_LIFECYCLE_SRC) $(SYNTH_DIR)/synth_data
 	@echo "Compiling test harness: $(TEST_AUDIO_LIFECYCLE_SRC)"
 	$(CC) $(TEST_CFLAGS) -c $< -o $@
 
+# Rule to compile Test Suite 4 harness (Uses CUnit)
+$(TEST_CONCURRENCY_OBJ): $(TEST_CONCURRENCY_SRC) $(SYNTH_DIR)/synth_data.h
+	@echo "Compiling test harness: $(TEST_CONCURRENCY_SRC)"
+	$(CC) $(TEST_CFLAGS) -c $< -o $@
+
 
 # --- Rules for Linking Test Runners ---
 
@@ -125,27 +136,37 @@ $(TEST_AUDIO_LIFECYCLE_RUNNER): $(TEST_AUDIO_LIFECYCLE_OBJ) $(AUDIO_OBJ_FOR_TEST
 	@echo "Linking test runner: $@"
 	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CMOCKA_LIBS) $(PORTAUDIO_LIBS) $(TEST_COMMON_LIBS)
 
+# Rule to link Test Suite 4 runner (Concurrency - CUnit) - NEW
+# Note: This simple test doesn't need gui.o_test or audio.o_test, just the harness object.
+# It requires CUnit and pthreads for linking.
+$(TEST_CONCURRENCY_RUNNER): $(TEST_CONCURRENCY_OBJ)
+	@echo "Linking test runner: $@"
+	$(CC) $(TEST_CFLAGS) $^ -o $@ $(CUNIT_LIBS) $(TEST_COMMON_LIBS)
+
 
 # --- Main Test Target ---
-# Depends on all test runners being built
-test: $(TEST_AUDIO_CALLBACK_RUNNER) $(TEST_GUI_HELPERS_RUNNER) $(TEST_AUDIO_LIFECYCLE_RUNNER)
+# Depends on all test runners being built 
+test: $(TEST_AUDIO_CALLBACK_RUNNER) $(TEST_GUI_HELPERS_RUNNER) $(TEST_AUDIO_LIFECYCLE_RUNNER) $(TEST_CONCURRENCY_RUNNER)
 	@echo "\n--- Running Audio Callback Tests (CUnit) ---"
 	./$(TEST_AUDIO_CALLBACK_RUNNER)
 	@echo "\n--- Running GUI Helper Tests (CUnit) ---"
 	./$(TEST_GUI_HELPERS_RUNNER)
 	@echo "\n--- Running Audio Lifecycle Tests (CMocka) ---"
 	./$(TEST_AUDIO_LIFECYCLE_RUNNER)
+	@echo "\n--- Running Concurrency Tests (CUnit) ---" # Added execution
+	./$(TEST_CONCURRENCY_RUNNER)
 	@echo "\n--- All tests finished ---"
 
 
 # --- Clean Target ---
-# Remove all test-related artifacts
+# Remove all test-related artifacts 
 clean:
 	@echo "Cleaning build and test artifacts..."
 	rm -f $(TARGET) $(OBJS) \
 	      $(TEST_AUDIO_CALLBACK_RUNNER) $(TEST_AUDIO_CALLBACK_OBJ) $(AUDIO_OBJ_FOR_TEST) \
 	      $(TEST_GUI_HELPERS_RUNNER) $(TEST_GUI_HELPERS_OBJ) $(GUI_OBJ_FOR_TEST) \
-	      $(TEST_AUDIO_LIFECYCLE_RUNNER) $(TEST_AUDIO_LIFECYCLE_OBJ)
+	      $(TEST_AUDIO_LIFECYCLE_RUNNER) $(TEST_AUDIO_LIFECYCLE_OBJ) \
+	      $(TEST_CONCURRENCY_RUNNER) $(TEST_CONCURRENCY_OBJ)
 	@echo "Clean complete."
 
 
