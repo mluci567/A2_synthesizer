@@ -251,7 +251,7 @@
              local_phase = fmod(local_phase, 2.0 * M_PI); if (local_phase < 0.0) local_phase += 2.0 * M_PI;
          } else {
              sample = 0.0f;
-             // Optional: Reset phase when idle?
+             // Reset phase when idle?
              // if (local_stage == ENV_IDLE && local_phase != 0.0) { local_phase = 0.0; }
          }
  
@@ -305,7 +305,7 @@
              local_phase2 = fmod(local_phase2, 2.0 * M_PI); if (local_phase2 < 0.0) local_phase2 += 2.0 * M_PI;
          } else {
              sample2 = 0.0f;
-             // Optional: Reset phase when idle?
+             //  Reset phase when idle?
              // if (local_stage2 == ENV_IDLE && local_phase2 != 0.0) { local_phase2 = 0.0; }
          }
  

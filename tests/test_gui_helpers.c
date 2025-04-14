@@ -11,14 +11,12 @@
  #include <stdlib.h>
  #include <string.h>
  #include <math.h>
- #include <pthread.h> // For mutex type in SharedSynthData
- 
+ #include <pthread.h> 
  #include <CUnit/Basic.h>
  
- #include "../synth/synth_data.h" // Need the data structure definition
- #include "../synth/gui.h"     // Need the calculate_current_envelope declaration(s)
+ #include "../synth/synth_data.h" 
+ #include "../synth/gui.h"   
  
- // --- Add Declaration for Wave 2 Helper (Ideally should be in gui.h) ---
  #ifdef TESTING
  /**
   * @brief Declaration of the Wave 2 envelope calculation helper function for testing.
@@ -72,7 +70,7 @@
   */
  void setup_test_data(void) {
      // Set typical values for testing, including Wave 2 defaults
-     g_synth_data = (SharedSynthData){ // *** FIXED: Use g_synth_data ***
+     g_synth_data = (SharedSynthData){ 
          // Wave 1
          .frequency = 440.0, .amplitude = 0.8, .waveform = WAVE_SINE,
          .attackTime = 0.1, .decayTime = 0.2, .sustainLevel = 0.5, .releaseTime = 0.3,

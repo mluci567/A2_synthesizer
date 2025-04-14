@@ -9,8 +9,8 @@
  #ifndef GUI_H
  #define GUI_H
  
- #include <gtk/gtk.h>      // For GtkApplication and other GTK types
- #include "synth_data.h" // For SharedSynthData type
+ #include <gtk/gtk.h>      
+ #include "synth_data.h" 
  
  // --- Public GUI Function ---
  
@@ -31,17 +31,31 @@
  // --- Declaration for Testing ---
  #ifdef TESTING
  /**
-  * @brief Declaration of the envelope calculation helper function for testing.
+  * @brief Declaration of the Wave 1 envelope calculation helper function for testing.
   *
   * This declaration makes the internal calculate_current_envelope function
   * (defined in gui.c) visible to the test harness when the TESTING macro
   * is defined during compilation.
   *
   * @param[in] data Pointer to the shared synthesizer data structure.
-  * @return The calculated envelope multiplier based on the state in `data`.
+  * @return The calculated envelope multiplier for Wave 1 based on the state in `data`.
   * @see calculate_current_envelope() implementation in gui.c
   */
  double calculate_current_envelope(const SharedSynthData *data);
+ 
+ /**
+  * @brief Declaration of the Wave 2 envelope calculation helper function for testing.
+  *
+  * This declaration makes the internal calculate_current_envelope_wave2 function
+  * (defined in gui.c) visible to the test harness when the TESTING macro
+  * is defined during compilation.
+  *
+  * @param[in] data Pointer to the shared synthesizer data structure.
+  * @return The calculated envelope multiplier for Wave 2 based on the state in `data`.
+  * @see calculate_current_envelope_wave2() implementation in gui.c
+  */
+ double calculate_current_envelope_wave2(const SharedSynthData *data); 
+ 
  #endif // TESTING
  
  

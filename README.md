@@ -25,6 +25,10 @@ A simple dual-oscillator synthesizer application built in C, featuring a GTK+ 3 
     * **"Note On/Off" toggle button to trigger and release sounds**
         * Pressing (Note On**)**: The callback (`on_note_on_button_toggled`) sets the ADSR state (`g_synth_data.currentStage`) to `ENV_ATTACK`, resets `timeInStage` and `phase`, and sets the `note_active` flag. The audio callback begins processing the Attack -> Decay -> Sustain stages.
         * Releasing (Note Off): The callback calculates the current envelope amplitude (`calculate_current_envelope`) and stores it in `lastEnvValue`. It then sets currentStage to `ENV_RELEASE` and resets `timeInStage`. The audio callback uses `lastEnvValue` as the starting point for the release ramp down to silence.
+* **Preset System:**
+    * Save the current settings of *both* waves to a preset file (`.synthpreset`).
+    * Load settings for both waves from previously saved preset files via a dropdown menu.
+    * Presets are stored in the `presets` directory.
 * **Audio Engine:**
     * Uses PortAudio for cross-platform audio I/O
     * Real-time audio callback generates samples based on current parameters
@@ -32,7 +36,7 @@ A simple dual-oscillator synthesizer application built in C, featuring a GTK+ 3 
 * **User Interface:**
     * Built with GTK+ 3
     * Visualizes the selected oscillator waveform (without envelope) in a drawing area
-* **Concurrency:** Uses pthreads and a mutex to safely share synthesizer parameters between the GUI thread and the real-time audio thread
+
 
 ## Dependencies
 
@@ -45,6 +49,7 @@ To build and run this project, you will need the following:
 * **Libraries (Development Headers):**
     * `GTK+ 3` (e.g., `libgtk-3-dev` on Debian/Ubuntu)
     * `PortAudio v19` (e.g., `libportaudio-dev` on Debian/Ubuntu)
+    * `GLib 2.0` (e.g., `libglib2.0-dev` on Debian/Ubuntu - often a dependency of GTK+)
     * `pthreads` (usually part of the standard C library/toolchain)
     * `CUnit` (for testing, e.g., `libcunit1-dev` on Debian/Ubuntu)
     * `CMocka` (for testing, e.g., `libcmocka-dev` on Debian/Ubuntu)
@@ -73,28 +78,65 @@ After successfully building the project, run the executable:
 This will launch the GTK+ interface.
 
 ## Usage
-* Use the sliders to adjust Frequency, Amplitude, and ADSR envelope parameters (Attack, Decay, Sustain level, Release time).
-* Select the desired Waveform from the dropdown menu.
-* Click the "Note On/Off" button to start playing a sound. Click it again to trigger the release phase of the envelope.
-* The drawing area at the bottom displays a visual representation of the selected waveform shape and amplitude.
+* The interface is split into sections for Wave 1 and Wave 2 controls.
+* For each wave, use the sliders to adjust Frequency, Amplitude, and ADSR envelope parameters (Attack, Decay, Sustain level, Release time).
+* For each wave, select the desired Waveform from its dropdown menu.
+* Click the "Note On/Off" button for a specific wave to start playing its sound. Click it again to trigger the release phase of that wave's envelope. Both waves can be triggered independently.
+* The drawing area at the bottom displays a visual representation of the selected waveform shapes and amplitudes for both waves simultaneously (Wave 1: Magenta, Wave 2: Cyan-Blue).
+* Presets:
+    * To save the current settings of both waves, click "Save Preset As..." and choose a filename (ending in .synthpreset) in the presets directory.
+    * To load previously saved settings, select the desired preset file from the "Load Preset:" dropdown menu. The controls for both waves will update automatically.
 
 ## Project Structure
 ```
 A2_synthesizer/
 ├── makefile              # Build script for the application and tests
 ├── synth/                # Core synthesizer source code
-│   ├── main.c            # Main application entry point, initialization
-│   ├── gui.c             # GTK+ GUI implementation and callbacks
+│   ├── main.c            # Main application entry point, initialization for dual waves
+│   ├── gui.c             # GTK+ GUI implementation (dual controls, presets)
 │   ├── gui.h             # Header for GUI functions
-│   ├── audio.c           # PortAudio implementation, audio callback, ADSR logic
+│   ├── audio.c           # PortAudio implementation (dual wave callback, mixing)
 │   ├── audio.h           # Header for audio functions
-│   └── synth_data.h      # Shared data structures and enums (Waveform, ADSR Stage)
+│   ├── presets.c         # Preset saving and loading logic
+│   ├── presets.h         # Header for preset functions
+│   └── synth_data.h      # Shared data structures (dual wave params/state, PresetData)
+├── presets 
+│   └── "_".synthpreset   # Included preset files may vary 
 └── tests/                # Unit tests
     ├── test_audio_lifecycle.c # CMocka tests for audio init/start/stop/terminate
-    ├── test_gui_helpers.c  # CUnit tests for GUI helper functions (e.g., envelope calculation)
-    ├── test_audio.c        # CUnit tests for the audio processing callback (paCallback) 
-    └── test_concurrency.c  # CUnit tests for basic concurrent data access 
+    ├── test_gui_helpers.c  # CUnit tests for GUI helper functions (dual wave envelope calcs)
+    ├── test_audio.c        # CUnit tests for the audio processing callback (dual wave ADSR, mixing)
+    └── test_concurrency.c  # CUnit tests for basic concurrent data access
 ```
+## Preset File Format (`.synthpreset`)
+
+The synthesizer allows saving and loading the complete state of both waves using preset files.
+
+* **Location:** Preset files are expected to be stored in the `presets/` directory relative to the executable.
+* **Extension:** Preset files should use the `.synthpreset` extension.
+* **Format:**
+    * Plain text file.
+    * Each line represents one parameter in a `key: value` format.
+    * Whitespace around the key, colon, and value is generally ignored during loading.
+    * The order of lines does not matter, but all required parameters must be present.
+* **Required Parameters:** A valid preset file must contain lines for all 14 parameters (7 for each wave):
+    * **Wave 1:**
+        * `frequency1`: (float) Frequency in Hz.
+        * `amplitude1`: (float) Amplitude (0.0 to 1.0).
+        * `waveform1`: (int) Waveform type (0=Sine, 1=Square, 2=Sawtooth, 3=Triangle).
+        * `attackTime1`: (float) Attack time in seconds.
+        * `decayTime1`: (float) Decay time in seconds.
+        * `sustainLevel1`: (float) Sustain level (0.0 to 1.0).
+        * `releaseTime1`: (float) Release time in seconds.
+    * **Wave 2:**
+        * `frequency2`: (float) Frequency in Hz.
+        * `amplitude2`: (float) Amplitude (0.0 to 1.0).
+        * `waveform2`: (int) Waveform type (0=Sine, 1=Square, 2=Sawtooth, 3=Triangle).
+        * `attackTime2`: (float) Attack time in seconds.
+        * `decayTime2`: (float) Decay time in seconds.
+        * `sustainLevel2`: (float) Sustain level (0.0 to 1.0).
+        * `releaseTime2`: (float) Release time in seconds.
+
 ## Testing
 The project includes unit tests using the `CUnit` and `CMocka` frameworks.
 

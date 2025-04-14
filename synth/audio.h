@@ -10,8 +10,8 @@
  #ifndef AUDIO_H
  #define AUDIO_H
  
- #include <portaudio.h>  // For PaError and other PortAudio types
- #include "synth_data.h" // For SharedSynthData type
+ #include <portaudio.h> 
+ #include "synth_data.h" 
  
  // --- Public Audio Control Functions ---
  

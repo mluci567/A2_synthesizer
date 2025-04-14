@@ -10,14 +10,13 @@
  #include <gtk/gtk.h>
  #include <pthread.h>
  #include <stdio.h>
- #include <stdlib.h> // For exit, EXIT_FAILURE
- #include <string.h> // For strerror
- #include <errno.h>  // For errno (though strerror handles most pthread errors)
+ #include <stdlib.h> 
+ #include <string.h> 
+ #include <errno.h>  
  
- // Include definitions and public function declarations from other modules
- #include "synth_data.h" // Shared data structure definition
- #include "gui.h"        // GUI creation function
- #include "audio.h"      // Audio lifecycle functions
+ #include "synth_data.h" 
+ #include "gui.h"        
+ #include "audio.h"      
  
  // --- Global Shared Data Instance Definition ---
  /**
@@ -125,7 +124,7 @@
      printf("Initialized mutex.\n");
  
      // --- 3. Initialize PortAudio & Audio State ---
-     // initialize_audio now also sets initial envelope states for both waves
+     // initialize_audio sets initial envelope states for both waves
      pa_err = initialize_audio(&g_synth_data); // Call function from audio module
      if (pa_err != paNoError) {
          fprintf(stderr, "Failed to initialize PortAudio (Error %d: %s). Exiting.\n", pa_err, Pa_GetErrorText(pa_err));
@@ -134,8 +133,6 @@
      }
  
      // --- 4. Create and Configure GTK Application ---
-     // Use default flags, includes handling command line args like --version
-     // Using a more specific application ID is good practice
      app = gtk_application_new("com.example.csynth.dualwave", G_APPLICATION_DEFAULT_FLAGS);
       if (app == NULL) {
           fprintf(stderr, "Error: Failed to create GTK application\n");
@@ -146,7 +143,7 @@
      }
      printf("Created GTK application instance.\n");
  
-     // Connect the 'activate' signal (emitted on startup) to our local activate function
+     // Connect the 'activate' signal (emitted on startup) to local activate function
      g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
  
      // --- 5. Run GTK Application Main Loop ---

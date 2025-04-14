@@ -1,0 +1,14 @@
+frequency1: 110.000000
+amplitude1: 0.900000
+waveform1: 1
+attackTime1: 0.010000
+decayTime1: 0.300000
+sustainLevel1: 0.100000
+releaseTime1: 0.200000
+frequency2: 220.000000
+amplitude2: 0.500000
+waveform2: 1
+attackTime2: 0.020000
+decayTime2: 0.400000
+sustainLevel2: 0.050000
+releaseTime2: 0.250000

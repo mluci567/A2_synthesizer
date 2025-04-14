@@ -5,14 +5,14 @@
  * This header file contains the definitions for the main `SharedSynthData`
  * structure, which holds all parameters and state shared between the GUI
  * and audio threads. It also defines enumerations for waveform types
- * and ADSR envelope stages.
+ * and ADSR envelope stages, and includes the structure for preset data.
  */
 
  #ifndef SYNTH_DATA_H
  #define SYNTH_DATA_H
  
- #include <gtk/gtk.h>      
- #include <pthread.h>    
+ #include <gtk/gtk.h>
+ #include <pthread.h>
  
  // --- Enums ---
  
@@ -40,6 +40,32 @@
  } EnvelopeStage;
  
  
+ // --- Preset Data Structure ---
+ /**
+  * @struct PresetData
+  * @brief Structure holding parameters for a single synthesizer preset.
+  * Contains values for both waves, suitable for saving/loading.
+  */
+ typedef struct {
+     // Wave 1
+     double frequency1;
+     double amplitude1;
+     WaveformType waveform1; // Store as int/enum value
+     double attackTime1;
+     double decayTime1;
+     double sustainLevel1;
+     double releaseTime1;
+     // Wave 2
+     double frequency2;
+     double amplitude2;
+     WaveformType waveform2; // Store as int/enum value
+     double attackTime2;
+     double decayTime2;
+     double sustainLevel2;
+     double releaseTime2;
+ } PresetData;
+ 
+ 
  // --- Shared Parameter Structure ---
  
  /**
@@ -48,7 +74,8 @@
   *
   * This structure is the central point for communication between the GUI thread
   * and the real-time audio thread. Access must be protected by the included mutex.
-  * Now includes parameters for two independent waves/oscillators.
+  * Now includes parameters for two independent waves/oscillators and pointers
+  * to GUI widgets required for preset loading updates.
   */
  typedef struct {
      // --- Wave 1 Synthesis Parameters (Controlled by GUI, Read by Audio) ---
@@ -89,8 +116,27 @@
      // --- Synchronization Primitive ---
      pthread_mutex_t mutex;  ///< Mutex to protect concurrent access to this structure from GUI and audio threads.
  
-     // --- GUI Link (Optional but useful) ---
-     GtkWidget *waveform_drawing_area; ///< Pointer to the GTK drawing area widget used for waveform visualization. Set by GUI thread.
+     // --- GUI Link (Set by GUI thread) ---
+     GtkWidget *waveform_drawing_area; ///< Pointer to the GTK drawing area widget used for waveform visualization.
+ 
+     // --- GUI Widget Pointers (Needed for updating GUI on preset load) ---
+     // These should be assigned in create_gui() after widgets are created.
+     // Wave 1 Widgets
+     GtkRange *freq_slider1_widget;
+     GtkRange *amp_slider1_widget;
+     GtkComboBox *waveform_combo1_widget;
+     GtkRange *attack_slider1_widget;
+     GtkRange *decay_slider1_widget;
+     GtkRange *sustain_slider1_widget;
+     GtkRange *release_slider1_widget;
+     // Wave 2 Widgets
+     GtkRange *freq_slider2_widget;
+     GtkRange *amp_slider2_widget;
+     GtkComboBox *waveform_combo2_widget;
+     GtkRange *attack_slider2_widget;
+     GtkRange *decay_slider2_widget;
+     GtkRange *sustain_slider2_widget;
+     GtkRange *release_slider2_widget;
  
  } SharedSynthData;
  

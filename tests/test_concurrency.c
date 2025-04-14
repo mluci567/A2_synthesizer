@@ -9,11 +9,9 @@
  #include <stdio.h>
  #include <stdlib.h>
  #include <pthread.h>
- #include <unistd.h> // For usleep
- 
+ #include <unistd.h> 
  #include <CUnit/Basic.h>
  
- // Include project headers (adjust path as needed by makefile CFLAGS)
  #include "../synth/synth_data.h"
  
  // --- Test Globals & Setup ---
@@ -21,7 +19,6 @@
  // Make the global accessible for the test (extern if needed, or define locally for test scope)
  // If running this test requires the actual global instance from main.c, linking might be complex.
  // For simplicity, this example defines a local instance for the test scope.
- // Adjust this based on how you link your tests.
  SharedSynthData g_test_synth_data_concurrency;
  
  // Number of iterations for threads
@@ -34,10 +31,8 @@
   * @return 0 on success, -1 on failure.
   */
  int init_concurrency_suite(void) {
-     // Initialize with some defaults
      g_test_synth_data_concurrency = (SharedSynthData){
          .frequency = 100.0, .amplitude = 0.5, .frequency2 = 200.0, .amplitude2 = 0.5,
-         // ... other fields if needed ...
          .sampleRate = 44100.0
      };
      g_shared_counter = 0;
@@ -80,7 +75,6 @@
          int ret_unlock = pthread_mutex_unlock(&g_test_synth_data_concurrency.mutex);
          CU_ASSERT_EQUAL_FATAL(ret_unlock, 0); // Fail test if unlock fails
  
-         // Optional small sleep to yield and increase chance of contention
          // usleep(rand() % 50); // Requires <unistd.h> and seeding rand()
      }
      return NULL;
@@ -105,7 +99,6 @@
          int ret_unlock = pthread_mutex_unlock(&g_test_synth_data_concurrency.mutex);
          CU_ASSERT_EQUAL_FATAL(ret_unlock, 0);
  
-         // Optional small sleep
          // usleep(rand() % 50);
      }
      // Pass back the accumulated value (just for demo purposes)
@@ -149,10 +142,9 @@
      //    Each thread increments NUM_ITERATIONS times.
      CU_ASSERT_EQUAL(g_shared_counter, NUM_ITERATIONS * 2);
  
-     // Optional: Check the returned value from audio thread (if meaningful)
      if (audio_result_ptr) {
          // double final_sum = *(double*)audio_result_ptr;
-         // printf("Debug: Audio thread accumulated frequency sum: %f\n", final_sum); // Example
+         // printf("Debug: Audio thread accumulated frequency sum: %f\n", final_sum);
          free(audio_result_ptr); // Free the allocated memory
      }
  }

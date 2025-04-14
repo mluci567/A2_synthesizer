@@ -12,16 +12,13 @@
  #include <stdlib.h>
  #include <string.h>
  #include <math.h>
- #include <pthread.h> // For mutex type in SharedSynthData
- #include <float.h>  // For FLT_MAX
- #include <errno.h>  // For error checking mutex init
-
- // Include CUnit headers
+ #include <pthread.h> 
+ #include <float.h>  
+ #include <errno.h>  
  #include <CUnit/Basic.h>
 
- // Include project headers (adjust path as needed)
- #include "../synth/synth_data.h" // Correct relative path from makefile's perspective
- #include "../synth/audio.h"     // Correct relative path from makefile's perspective
+ #include "../synth/synth_data.h" 
+ #include "../synth/audio.h"     
 
  // --- Test Globals ---
  /** @brief Mock sample rate used for calculations in tests. */
@@ -192,7 +189,7 @@
      CU_ASSERT_EQUAL(g_test_synth_data.currentStage, ENV_DECAY);
      CU_ASSERT(g_test_synth_data.timeInStage > 0.0);
      CU_ASSERT(g_test_synth_data.timeInStage < g_test_synth_data.decayTime);
-     CU_ASSERT(is_decreasing()); // Use new helper
+     CU_ASSERT(is_decreasing()); 
      CU_ASSERT(get_max_abs_output() > (g_test_synth_data.amplitude * g_test_synth_data.sustainLevel));
      CU_ASSERT_EQUAL(g_test_synth_data.currentStage2, ENV_IDLE);
  }
@@ -232,7 +229,7 @@
      CU_ASSERT_EQUAL(g_test_synth_data.note_active, 1);
      CU_ASSERT(g_test_synth_data.timeInStage > 0.0);
      CU_ASSERT(g_test_synth_data.timeInStage < g_test_synth_data.releaseTime);
-     CU_ASSERT(is_decreasing()); // Use new helper
+     CU_ASSERT(is_decreasing()); 
      CU_ASSERT(get_max_abs_output() <= g_test_synth_data.lastEnvValue * (1.0 + TOLERANCE) );
      CU_ASSERT_EQUAL(g_test_synth_data.currentStage2, ENV_IDLE);
  }
@@ -391,7 +388,6 @@
 
      if ( (NULL == CU_add_test(pSuite, "test_adsr_idle_both_waves", test_adsr_idle_both_waves)) ||
           (NULL == CU_add_test(pSuite, "test_w1_adsr_attack_ramp", test_w1_adsr_attack_ramp)) ||
-          // ... (rest of tests omitted for brevity, assume they are added correctly) ...
           (NULL == CU_add_test(pSuite, "test_mixing_two_sines_sustain", test_mixing_two_sines_sustain))
         )
      { CU_cleanup_registry(); return CU_get_error(); }

@@ -18,7 +18,7 @@
  #include <string.h>
  
  #include <cmocka.h>
- #include <portaudio.h> // Include the REAL PortAudio header
+ #include <portaudio.h> 
  
  // --- Preprocessor Defines for Mocking ---
  // Redirect calls to the real PortAudio functions to our mock wrappers below.
@@ -34,14 +34,12 @@
  #define Pa_CloseStream __wrap_Pa_CloseStream
  #define Pa_GetErrorText __wrap_Pa_GetErrorText
  
- // --- Now include project headers ---
+
  #include "../synth/synth_data.h"
- #include "../synth/audio.h" // Include header for function prototypes under test
+ #include "../synth/audio.h"
  
- // NO direct include of audio.c
  
  // --- Mock Wrapper Implementations ---
- // Implement the mock logic within functions named __wrap_FunctionName
  
  /** @brief Mock implementation FOR Pa_Initialize. Uses CMocka expectations. */
  PaError __wrap_Pa_Initialize(void) {
@@ -132,7 +130,7 @@
  
  // --- Test Globals ---
  SharedSynthData g_test_synth_data;
- // We still need to simulate the internal static g_paStream for some tests.
+ // Still need to simulate the internal static g_paStream for some tests.
  // Making it non-static here allows tests to influence setup if needed,
  // although direct testing of its state is less feasible now.
  PaStream *g_paStream = NULL;
